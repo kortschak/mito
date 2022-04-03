@@ -31,7 +31,7 @@ import (
 //
 // Example:
 //
-//     head('http://www.example.com/')  // returns "Body": "", "Close": false,
+//     head('http://www.example.com/')  // returns {"Body": "", "Close": false,
 //
 //
 // GET

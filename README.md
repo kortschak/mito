@@ -9,7 +9,7 @@ The `mito` command will apply CEL expressions to a JSON value input under the la
 For example the following CEL expression processes the stream below generating the Cartesian product of the `num` and `let` fields and retaining the original message and adding timestamp metadata.
 
 ```
-[data.map(e, has(e.other) && e.other != '',
+data.map(e, has(e.other) && e.other != '',
 	has(e.num) && size(e.num) != 0 && has(e.let) && size(e.let) != 0 ?
 		// Handle Cartesian product.
 		e.num.map(v1,
@@ -34,16 +34,16 @@ For example the following CEL expression processes the stream below generating t
 			"@timestamp": now(), // As a function, the time the action happened.
 			"original": e.encode_json(),
 		})]] 
-).flatten().drop(['unwanted.let']).drop_empty()].map(res,
+).flatten().drop(['unwanted.let']).drop_empty().as(res,
 	{
 		"results": res,
-		"timestamps": [res.collate('@timestamp')].map(t, {
+		"timestamps": res.collate('@timestamp').as(t, {
 			"first": t.min(),
 			"last": t.max(),
 			"list": t,
-		})[0],
+		}),
 	}
-)[0]
+)
 ```
 working on
 ```json

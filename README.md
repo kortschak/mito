@@ -34,7 +34,7 @@ data.map(e, has(e.other) && e.other != '',
 			"@timestamp": now(), // As a function, the time the action happened.
 			"original": e.encode_json(),
 		})]] 
-).flatten().drop(['unwanted.let']).drop_empty().as(res,
+).flatten().drop_empty().as(res,
 	{
 		"results": res,
 		"timestamps": res.collate('@timestamp').as(t, {

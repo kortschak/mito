@@ -16,6 +16,7 @@ require (
 	github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
 	gopkg.in/errgo.v2 v2.1.0 // indirect
 )
 

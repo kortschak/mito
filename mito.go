@@ -93,7 +93,7 @@ var (
 		"try":         lib.Try(),
 		"file":        lib.File(mimetypes),
 		"mime":        lib.MIME(mimetypes),
-		"http":        lib.HTTP(),
+		"http":        lib.HTTP(nil, nil),
 	}
 
 	mimetypes = map[string]interface{}{

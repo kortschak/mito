@@ -16,12 +16,16 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
 	"github.com/google/cel-go/interpreter/functions"
+	"golang.org/x/time/rate"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
 // HTTP returns a cel.EnvOption to configure extended functions for HTTP
 // requests. Requests and responses are returned as maps corresponding to
-// the Go http.Request and http.Response structs.
+// the Go http.Request and http.Response structs. The client and limit parameters
+// will be used for the requests and API rate limiting. If client is nil
+// the http.DefaultClient will be used and if limit is nil an non-limiting
+// rate.Limiter will be used.
 //
 // HEAD
 //
@@ -154,11 +158,23 @@ import (
 //
 //     get_request("http://www.example.com/").do_request()  // returns {"Body": "PCFkb2N0e...
 //
-func HTTP() cel.EnvOption {
-	return cel.Lib(httpLib{})
+func HTTP(client *http.Client, limit *rate.Limiter) cel.EnvOption {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if limit == nil {
+		limit = rate.NewLimiter(rate.Inf, 0)
+	}
+	return cel.Lib(httpLib{
+		client: client,
+		limit:  limit,
+	})
 }
 
-type httpLib struct{}
+type httpLib struct {
+	client *http.Client
+	limit  *rate.Limiter
+}
 
 func (httpLib) CompileOptions() []cel.EnvOption {
 	return []cel.EnvOption{
@@ -241,13 +257,13 @@ func (l httpLib) ProgramOptions() []cel.ProgramOption {
 		cel.Functions(
 			&functions.Overload{
 				Operator: "head_string",
-				Unary:    doHead,
+				Unary:    l.doHead,
 			},
 		),
 		cel.Functions(
 			&functions.Overload{
 				Operator: "get_string",
-				Unary:    doGet,
+				Unary:    l.doGet,
 			},
 		),
 		cel.Functions(
@@ -259,11 +275,11 @@ func (l httpLib) ProgramOptions() []cel.ProgramOption {
 		cel.Functions(
 			&functions.Overload{
 				Operator: "post_string_string_bytes",
-				Function: doPost,
+				Function: l.doPost,
 			},
 			&functions.Overload{
 				Operator: "post_string_string_string",
-				Function: doPost,
+				Function: l.doPost,
 			},
 		),
 		cel.Functions(
@@ -293,18 +309,22 @@ func (l httpLib) ProgramOptions() []cel.ProgramOption {
 		cel.Functions(
 			&functions.Overload{
 				Operator: "map_do_request",
-				Unary:    doRequest,
+				Unary:    l.doRequest,
 			},
 		),
 	}
 }
 
-func doHead(arg ref.Val) ref.Val {
+func (l httpLib) doHead(arg ref.Val) ref.Val {
 	url, ok := arg.(types.String)
 	if !ok {
 		return types.ValOrErr(url, "no such overload for head")
 	}
-	resp, err := http.Head(string(url))
+	err := l.limit.Wait(context.TODO())
+	if err != nil {
+		return types.NewErr("%s", err)
+	}
+	resp, err := l.client.Head(string(url))
 	if err != nil {
 		return types.NewErr("%s", err)
 	}
@@ -315,12 +335,16 @@ func doHead(arg ref.Val) ref.Val {
 	return types.DefaultTypeAdapter.NativeToValue(rm)
 }
 
-func doGet(arg ref.Val) ref.Val {
+func (l httpLib) doGet(arg ref.Val) ref.Val {
 	url, ok := arg.(types.String)
 	if !ok {
 		return types.ValOrErr(url, "no such overload for get")
 	}
-	resp, err := http.Get(string(url))
+	err := l.limit.Wait(context.TODO())
+	if err != nil {
+		return types.NewErr("%s", err)
+	}
+	resp, err := l.client.Get(string(url))
 	if err != nil {
 		return types.NewErr("%s", err)
 	}
@@ -335,7 +359,7 @@ func newGetRequest(url ref.Val) ref.Val {
 	return newRequestBody(types.String("GET"), url)
 }
 
-func doPost(args ...ref.Val) ref.Val {
+func (l httpLib) doPost(args ...ref.Val) ref.Val {
 	if len(args) != 3 {
 		return types.NewErr("no such overload for post")
 	}
@@ -360,7 +384,11 @@ func doPost(args ...ref.Val) ref.Val {
 	default:
 		return types.NewErr("invalid type for post body: %s", text.Type())
 	}
-	resp, err := http.Post(string(url), string(content), body)
+	err := l.limit.Wait(context.TODO())
+	if err != nil {
+		return types.NewErr("%s", err)
+	}
+	resp, err := l.client.Post(string(url), string(content), body)
 	if err != nil {
 		return types.NewErr("%s", err)
 	}
@@ -517,7 +545,7 @@ func respToMap(resp *http.Response) (map[string]interface{}, error) {
 	return rm, nil
 }
 
-func doRequest(arg ref.Val) ref.Val {
+func (l httpLib) doRequest(arg ref.Val) ref.Val {
 	request, ok := arg.(traits.Mapper)
 	if !ok {
 		return types.ValOrErr(request, "no such overload for do_request")
@@ -532,7 +560,11 @@ func doRequest(arg ref.Val) ref.Val {
 	}
 	// Recover the context lost during serialisation to JSON.
 	req = req.WithContext(context.Background())
-	resp, err := http.DefaultClient.Do(req)
+	err = l.limit.Wait(context.TODO())
+	if err != nil {
+		return types.NewErr("%s", err)
+	}
+	resp, err := l.client.Do(req)
 	if err != nil {
 		return types.NewErr("%s", err)
 	}

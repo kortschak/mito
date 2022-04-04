@@ -306,11 +306,11 @@ func doHead(arg ref.Val) ref.Val {
 	}
 	resp, err := http.Head(string(url))
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	rm, err := respToMap(resp)
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	return types.DefaultTypeAdapter.NativeToValue(rm)
 }
@@ -322,11 +322,11 @@ func doGet(arg ref.Val) ref.Val {
 	}
 	resp, err := http.Get(string(url))
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	rm, err := respToMap(resp)
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	return types.DefaultTypeAdapter.NativeToValue(rm)
 }
@@ -362,11 +362,11 @@ func doPost(args ...ref.Val) ref.Val {
 	}
 	resp, err := http.Post(string(url), string(content), body)
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	rm, err := respToMap(resp)
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	return types.DefaultTypeAdapter.NativeToValue(rm)
 }
@@ -528,17 +528,17 @@ func doRequest(arg ref.Val) ref.Val {
 	}
 	req, err := mapToReq(reqm.(map[string]interface{}))
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	// Recover the context lost during serialisation to JSON.
 	req = req.WithContext(context.Background())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	respm, err := respToMap(resp)
 	if err != nil {
-		types.NewErr("%s", err)
+		return types.NewErr("%s", err)
 	}
 	return types.DefaultTypeAdapter.NativeToValue(respm)
 }

@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/cel-go v0.11.3-0.20220406063934-e53a8821becf
+	github.com/google/go-cmp v0.5.7
 	github.com/google/uuid v1.3.0
 	github.com/rogpeppe/go-internal v1.8.1
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65

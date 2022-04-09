@@ -26,3 +26,5 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/errgo.v2 v2.1.0 // indirect
 )
+
+replace github.com/google/cel-go => github.com/kortschak/cel-go v0.11.0-pre.0.20220409010912-481fae9550a6

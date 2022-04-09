@@ -13,8 +13,10 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"
 	"github.com/google/cel-go/interpreter"
@@ -38,6 +40,7 @@ func Main() int {
 	}
 	use := flag.String("use", "all", "libraries to use")
 	data := flag.String("data", "", "path to a JSON object holding input (exposed as the label "+root+")")
+	cfgPath := flag.String("cfg", "", "path to a YAML file holding configuration for global vars and regular expressions")
 	flag.Parse()
 	if len(flag.Args()) != 1 {
 		flag.Usage()
@@ -45,6 +48,36 @@ func Main() int {
 	}
 
 	var libs []cel.EnvOption
+	if *cfgPath != "" {
+		f, err := os.Open(*cfgPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		defer f.Close()
+		dec := yaml.NewDecoder(f)
+		var cfg config
+		err = dec.Decode(&cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		if len(cfg.Globals) != 0 {
+			libs = append(libs, lib.Globals(cfg.Globals))
+		}
+		if len(cfg.Regexps) != 0 {
+			regexps := make(map[string]*regexp.Regexp)
+			for name, expr := range cfg.Regexps {
+				re, err := regexp.Compile(expr)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return 2
+				}
+				regexps[name] = re
+			}
+			libs = append(libs, lib.Regexp(regexps))
+		}
+	}
 	if *use == "all" {
 		for _, l := range libMap {
 			libs = append(libs, l)
@@ -176,4 +209,9 @@ func toUpper(p []byte) {
 			p[i] &^= 'a' - 'A'
 		}
 	}
+}
+
+type config struct {
+	Globals map[string]interface{} `yaml:"globals"`
+	Regexps map[string]string      `yaml:"regexp"`
 }

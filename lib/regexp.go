@@ -114,74 +114,49 @@ func (l regexpLib) CompileOptions() []cel.EnvOption {
 		cel.Declarations(
 			decls.NewFunction("re_match",
 				decls.NewInstanceOverload(
-					"bytes_re_match_string",
-					[]*expr.Type{decls.Bytes, decls.String},
-					decls.Bool,
-				),
-				decls.NewInstanceOverload(
-					"string_re_match_string",
-					[]*expr.Type{decls.String, decls.String},
+					"typeV_re_match_string",
+					[]*expr.Type{decls.Dyn, decls.String},
 					decls.Bool,
 				),
 			),
 			decls.NewFunction("re_find",
-				decls.NewInstanceOverload(
-					"bytes_re_find_string",
-					[]*expr.Type{decls.Bytes, decls.String},
-					decls.Bytes,
-				),
-				decls.NewInstanceOverload(
-					"string_re_find_string",
-					[]*expr.Type{decls.String, decls.String},
-					decls.String,
+				decls.NewParameterizedInstanceOverload(
+					"typeV_re_find_string",
+					[]*expr.Type{typeV, decls.String},
+					typeV,
+					[]string{"V"},
 				),
 			),
 			decls.NewFunction("re_find_all",
-				decls.NewInstanceOverload(
-					"bytes_re_find_all_string",
-					[]*expr.Type{decls.Bytes, decls.String},
-					decls.NewListType(decls.Bytes),
-				),
-				decls.NewInstanceOverload(
-					"string_re_find_all_string",
-					[]*expr.Type{decls.String, decls.String},
-					decls.NewListType(decls.String),
+				decls.NewParameterizedInstanceOverload(
+					"typeV_re_find_all_string",
+					[]*expr.Type{typeV, decls.String},
+					decls.NewListType(typeV),
+					[]string{"V"},
 				),
 			),
 			decls.NewFunction("re_find_submatch",
-				decls.NewInstanceOverload(
-					"bytes_re_find_submatch_string",
-					[]*expr.Type{decls.Bytes, decls.String},
-					decls.NewListType(decls.Bytes),
-				),
-				decls.NewInstanceOverload(
-					"string_re_find_submatch_string",
-					[]*expr.Type{decls.String, decls.String},
-					decls.NewListType(decls.String),
+				decls.NewParameterizedInstanceOverload(
+					"typeV_re_find_submatch_string",
+					[]*expr.Type{typeV, decls.String},
+					decls.NewListType(typeV),
+					[]string{"V"},
 				),
 			),
 			decls.NewFunction("re_find_all_submatch",
-				decls.NewInstanceOverload(
-					"bytes_re_find_all_submatch_string",
-					[]*expr.Type{decls.Bytes, decls.String},
-					decls.NewListType(decls.NewListType(decls.Bytes)),
-				),
-				decls.NewInstanceOverload(
-					"string_re_find_all_submatch_string",
-					[]*expr.Type{decls.String, decls.String},
-					decls.NewListType(decls.NewListType(decls.String)),
+				decls.NewParameterizedInstanceOverload(
+					"typeV_re_find_all_submatch_string",
+					[]*expr.Type{typeV, decls.String},
+					decls.NewListType(decls.NewListType(typeV)),
+					[]string{"V"},
 				),
 			),
 			decls.NewFunction("re_replace_all",
-				decls.NewInstanceOverload(
-					"bytes_re_replace_all_string_bytes",
-					[]*expr.Type{decls.Bytes, decls.String, decls.Bytes},
-					decls.Bytes,
-				),
-				decls.NewInstanceOverload(
-					"string_re_replace_all_string_string",
-					[]*expr.Type{decls.String, decls.String, decls.String},
-					decls.String,
+				decls.NewParameterizedInstanceOverload(
+					"typeV_re_replace_all_string_dyn",
+					[]*expr.Type{typeV, decls.String, typeV},
+					typeV,
+					[]string{"V"},
 				),
 			),
 		),
@@ -192,221 +167,164 @@ func (l regexpLib) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{
 		cel.Functions(
 			&functions.Overload{
-				Operator: "bytes_re_match_string",
-				Binary:   l.matchBytes,
-			},
-			&functions.Overload{
-				Operator: "string_re_match_string",
-				Binary:   l.matchString,
+				Operator: "typeV_re_match_string",
+				Binary:   l.match,
 			},
 		),
 		cel.Functions(
 			&functions.Overload{
-				Operator: "bytes_re_find_string",
-				Binary:   l.findBytes,
-			},
-			&functions.Overload{
-				Operator: "string_re_find_string",
-				Binary:   l.findString,
+				Operator: "typeV_re_find_string",
+				Binary:   l.find,
 			},
 		),
 		cel.Functions(
 			&functions.Overload{
-				Operator: "bytes_re_find_all_string",
-				Binary:   l.findAllBytes,
-			},
-			&functions.Overload{
-				Operator: "string_re_find_all_string",
-				Binary:   l.findAllString,
+				Operator: "typeV_re_find_all_string",
+				Binary:   l.findAll,
 			},
 		),
 		cel.Functions(
 			&functions.Overload{
-				Operator: "bytes_re_find_submatch_string",
-				Binary:   l.findSubmatchBytes,
-			},
-			&functions.Overload{
-				Operator: "string_re_find_submatch_string",
-				Binary:   l.findSubmatchString,
+				Operator: "typeV_re_find_submatch_string",
+				Binary:   l.findSubmatch,
 			},
 		),
 		cel.Functions(
 			&functions.Overload{
-				Operator: "bytes_re_find_all_submatch_string",
-				Binary:   l.findAllSubmatchBytes,
-			},
-			&functions.Overload{
-				Operator: "string_re_find_all_submatch_string",
-				Binary:   l.findAllSubmatchString,
+				Operator: "typeV_re_find_all_submatch_string",
+				Binary:   l.findAllSubmatch,
 			},
 		),
 		cel.Functions(
 			&functions.Overload{
-				Operator: "bytes_re_replace_all_string_bytes",
-				Function: l.replaceAllBytes,
-			},
-			&functions.Overload{
-				Operator: "string_re_replace_all_string_string",
-				Function: l.replaceAllString,
+				Operator: "typeV_re_replace_all_string_dyn",
+				Function: l.replaceAll,
 			},
 		),
 	}
 }
 
-func (l regexpLib) matchBytes(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.Bytes)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
+func (l regexpLib) match(arg1, arg2 ref.Val) ref.Val {
 	patName, ok := arg2.(types.String)
 	if !ok {
 		return types.ValOrErr(patName, "no such overload")
 	}
-	return types.Bool(l[string(patName)].Match(src))
+	re, ok := l[string(patName)]
+	if !ok {
+		return types.NewErr("no regexp %s", patName)
+	}
+	switch src := arg1.(type) {
+	case types.Bytes:
+		return types.Bool(re.Match(src))
+	case types.String:
+		return types.Bool(re.MatchString(string(src)))
+	default:
+		return types.NewErr("invalid type for match: %T", arg1)
+	}
 }
 
-func (l regexpLib) matchString(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.String)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
+func (l regexpLib) find(arg1, arg2 ref.Val) ref.Val {
 	patName, ok := arg2.(types.String)
 	if !ok {
 		return types.ValOrErr(patName, "no such overload")
 	}
-	return types.Bool(l[string(patName)].MatchString(string(src)))
+	re, ok := l[string(patName)]
+	if !ok {
+		return types.NewErr("no regexp %s", patName)
+	}
+	switch src := arg1.(type) {
+	case types.Bytes:
+		return types.Bytes(re.Find(src))
+	case types.String:
+		return types.String(re.FindString(string(src)))
+	default:
+		return types.NewErr("invalid type for find: %T", arg1)
+	}
 }
 
-func (l regexpLib) findBytes(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.Bytes)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
+func (l regexpLib) findAll(arg1, arg2 ref.Val) ref.Val {
 	patName, ok := arg2.(types.String)
 	if !ok {
 		return types.ValOrErr(patName, "no such overload")
 	}
-	return types.Bytes(l[string(patName)].Find(src))
+	re, ok := l[string(patName)]
+	if !ok {
+		return types.NewErr("no regexp %s", patName)
+	}
+	switch src := arg1.(type) {
+	case types.Bytes:
+		return types.DefaultTypeAdapter.NativeToValue(re.FindAll(src, -1))
+	case types.String:
+		return types.DefaultTypeAdapter.NativeToValue(re.FindAllString(string(src), -1))
+	default:
+		return types.NewErr("invalid type for find_all: %T", arg1)
+	}
 }
 
-func (l regexpLib) findString(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.String)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
+func (l regexpLib) findSubmatch(arg1, arg2 ref.Val) ref.Val {
 	patName, ok := arg2.(types.String)
 	if !ok {
 		return types.ValOrErr(patName, "no such overload")
 	}
-	return types.String(l[string(patName)].FindString(string(src)))
+	re, ok := l[string(patName)]
+	if !ok {
+		return types.NewErr("no regexp %s", patName)
+	}
+	switch src := arg1.(type) {
+	case types.Bytes:
+		return types.DefaultTypeAdapter.NativeToValue(re.FindSubmatch(src))
+	case types.String:
+		return types.DefaultTypeAdapter.NativeToValue(re.FindStringSubmatch(string(src)))
+	default:
+		return types.NewErr("invalid type for find_submatch: %T", arg1)
+	}
 }
 
-func (l regexpLib) findAllBytes(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.Bytes)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
+func (l regexpLib) findAllSubmatch(arg1, arg2 ref.Val) ref.Val {
 	patName, ok := arg2.(types.String)
 	if !ok {
 		return types.ValOrErr(patName, "no such overload")
 	}
-	return types.DefaultTypeAdapter.NativeToValue(l[string(patName)].FindAll(src, -1))
+	re, ok := l[string(patName)]
+	if !ok {
+		return types.NewErr("no regexp %s", patName)
+	}
+	switch src := arg1.(type) {
+	case types.Bytes:
+		return types.DefaultTypeAdapter.NativeToValue(re.FindAllSubmatch(src, -1))
+	case types.String:
+		return types.DefaultTypeAdapter.NativeToValue(re.FindAllStringSubmatch(string(src), -1))
+	default:
+		return types.NewErr("invalid type for find_all_submatch: %T", arg1)
+	}
 }
 
-func (l regexpLib) findAllString(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.String)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
-	patName, ok := arg2.(types.String)
-	if !ok {
-		return types.ValOrErr(patName, "no such overload")
-	}
-	return types.DefaultTypeAdapter.NativeToValue(l[string(patName)].FindAllString(string(src), -1))
-}
-
-func (l regexpLib) findSubmatchBytes(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.Bytes)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
-	patName, ok := arg2.(types.String)
-	if !ok {
-		return types.ValOrErr(patName, "no such overload")
-	}
-	return types.DefaultTypeAdapter.NativeToValue(l[string(patName)].FindSubmatch(src))
-}
-
-func (l regexpLib) findSubmatchString(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.String)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
-	patName, ok := arg2.(types.String)
-	if !ok {
-		return types.ValOrErr(patName, "no such overload")
-	}
-	return types.DefaultTypeAdapter.NativeToValue(l[string(patName)].FindStringSubmatch(string(src)))
-}
-
-func (l regexpLib) findAllSubmatchBytes(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.Bytes)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
-	patName, ok := arg2.(types.String)
-	if !ok {
-		return types.ValOrErr(patName, "no such overload")
-	}
-	return types.DefaultTypeAdapter.NativeToValue(l[string(patName)].FindAllSubmatch(src, -1))
-}
-
-func (l regexpLib) findAllSubmatchString(arg1, arg2 ref.Val) ref.Val {
-	src, ok := arg1.(types.String)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
-	patName, ok := arg2.(types.String)
-	if !ok {
-		return types.ValOrErr(patName, "no such overload")
-	}
-	return types.DefaultTypeAdapter.NativeToValue(l[string(patName)].FindAllStringSubmatch(string(src), -1))
-}
-
-func (l regexpLib) replaceAllBytes(args ...ref.Val) ref.Val {
+func (l regexpLib) replaceAll(args ...ref.Val) ref.Val {
 	if len(args) != 3 {
 		return types.NoSuchOverloadErr()
-	}
-	src, ok := args[0].(types.Bytes)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
 	}
 	patName, ok := args[1].(types.String)
 	if !ok {
 		return types.ValOrErr(patName, "no such overload")
 	}
-	repl, ok := args[2].(types.Bytes)
+	re, ok := l[string(patName)]
 	if !ok {
-		return types.ValOrErr(repl, "no such overload")
+		return types.NewErr("no regexp %s", patName)
 	}
-	return types.Bytes(l[string(patName)].ReplaceAll(src, repl))
-}
-
-func (l regexpLib) replaceAllString(args ...ref.Val) ref.Val {
-	if len(args) != 3 {
-		return types.NoSuchOverloadErr()
+	switch src := args[0].(type) {
+	case types.Bytes:
+		repl, ok := args[2].(types.Bytes)
+		if !ok {
+			return types.ValOrErr(repl, "no such overload")
+		}
+		return types.Bytes(re.ReplaceAll(src, repl))
+	case types.String:
+		repl, ok := args[2].(types.String)
+		if !ok {
+			return types.ValOrErr(repl, "no such overload")
+		}
+		return types.String(re.ReplaceAllString(string(src), string(repl)))
+	default:
+		return types.NewErr("invalid type for replace_all: %T", args[0])
 	}
-	src, ok := args[0].(types.String)
-	if !ok {
-		return types.ValOrErr(src, "no such overload")
-	}
-	patName, ok := args[1].(types.String)
-	if !ok {
-		return types.ValOrErr(patName, "no such overload")
-	}
-	repl, ok := args[2].(types.String)
-	if !ok {
-		return types.ValOrErr(repl, "no such overload")
-	}
-	return types.String(l[string(patName)].ReplaceAllString(string(src), string(repl)))
 }

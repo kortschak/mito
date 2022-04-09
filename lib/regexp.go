@@ -48,8 +48,8 @@ import (
 //
 // Examples:
 //
-//     'food'.re_find('foo')    // return "foo"
-//     b'food'.re_find(b'foo')  // return "Zm9v"
+//     'food'.re_find('foo')    // return "food"
+//     b'food'.re_find(b'foo')  // return "Zm9vZA=="
 //
 //
 // RE Find All

@@ -219,7 +219,7 @@ func (l regexpLib) match(arg1, arg2 ref.Val) ref.Val {
 	case types.String:
 		return types.Bool(re.MatchString(string(src)))
 	default:
-		return types.NewErr("invalid type for match: %T", arg1)
+		return types.NewErr("invalid type for match: %s", arg1.Type())
 	}
 }
 
@@ -238,7 +238,7 @@ func (l regexpLib) find(arg1, arg2 ref.Val) ref.Val {
 	case types.String:
 		return types.String(re.FindString(string(src)))
 	default:
-		return types.NewErr("invalid type for find: %T", arg1)
+		return types.NewErr("invalid type for find: %s", arg1.Type())
 	}
 }
 
@@ -257,7 +257,7 @@ func (l regexpLib) findAll(arg1, arg2 ref.Val) ref.Val {
 	case types.String:
 		return types.DefaultTypeAdapter.NativeToValue(re.FindAllString(string(src), -1))
 	default:
-		return types.NewErr("invalid type for find_all: %T", arg1)
+		return types.NewErr("invalid type for find_all: %s", arg1.Type())
 	}
 }
 
@@ -276,7 +276,7 @@ func (l regexpLib) findSubmatch(arg1, arg2 ref.Val) ref.Val {
 	case types.String:
 		return types.DefaultTypeAdapter.NativeToValue(re.FindStringSubmatch(string(src)))
 	default:
-		return types.NewErr("invalid type for find_submatch: %T", arg1)
+		return types.NewErr("invalid type for find_submatch: %s", arg1.Type())
 	}
 }
 
@@ -295,7 +295,7 @@ func (l regexpLib) findAllSubmatch(arg1, arg2 ref.Val) ref.Val {
 	case types.String:
 		return types.DefaultTypeAdapter.NativeToValue(re.FindAllStringSubmatch(string(src), -1))
 	default:
-		return types.NewErr("invalid type for find_all_submatch: %T", arg1)
+		return types.NewErr("invalid type for find_all_submatch: %s", arg1.Type())
 	}
 }
 
@@ -325,6 +325,6 @@ func (l regexpLib) replaceAll(args ...ref.Val) ref.Val {
 		}
 		return types.String(re.ReplaceAllString(string(src), string(repl)))
 	default:
-		return types.NewErr("invalid type for replace_all: %T", args[0])
+		return types.NewErr("invalid type for replace_all: %s", args[0].Type())
 	}
 }

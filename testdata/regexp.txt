@@ -15,8 +15,7 @@ regexp:
 	"find_all": ['food fool'.re_find_all('foo.'), b'food fool'.re_find_all('foo.')],
 	"find_submatch": ['food fool'.re_find_submatch('foo(.)'), b'food fool'.re_find_submatch('foo(.)')],
 	"find_all_submatch": ['food fool'.re_find_all_submatch('foo(.)'), b'food fool'.re_find_all_submatch('foo(.)')],
-	"replace_all": ['food fool'.re_replace_all('(f)oo([ld])', '${1}u${2}'), string(b'food fool'.re_replace_all('(f)oo([ld])', b'${1}u${2}'))]
-
+	"replace_all": ['food fool'.re_replace_all('(f)oo([ld])', '${1}u${2}'), string(b'food fool'.re_replace_all('(f)oo([ld])', b'${1}u${2}'))],
 }
 -- want.txt --
 {

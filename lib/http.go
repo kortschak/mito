@@ -18,6 +18,7 @@ import (
 	"github.com/google/cel-go/interpreter/functions"
 	"golang.org/x/time/rate"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // HTTP returns a cel.EnvOption to configure extended functions for HTTP
@@ -145,7 +146,7 @@ import (
 //         "header": {
 //             "Authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ="
 //         }
-//     },
+//     }
 //
 //
 // Do Request
@@ -157,6 +158,48 @@ import (
 // Example:
 //
 //     get_request("http://www.example.com/").do_request()  // returns {"Body": "PCFkb2N0e...
+//
+//
+// Parse URL
+//
+// parse_url returns a map holding the details of the parsed URL corresponding
+// to the Go url.URL struct:
+//
+//     <string>.parse_url() -> <map<string,dyn>>
+//
+// Example:
+//
+//     "https://pkg.go.dev/net/url#URL".parse_url()
+//
+//     will return:
+//
+//     {
+//         "ForceQuery": false,
+//         "Fragment": "URL",
+//         "Host": "pkg.go.dev",
+//         "Opaque": "",
+//         "Path": "/net/url",
+//         "RawFragment": "",
+//         "RawPath": "",
+//         "RawQuery": "",
+//         "Scheme": "https",
+//         "User": null
+//     }
+//
+//
+// Format URL
+//
+// format_url returns string corresponding to the URL map that is the receiver:
+//
+//     <map<string,dyn>>.format_url() -> <string>
+//
+// Example:
+//
+//     "https://pkg.go.dev/net/url#URL".parse_url().with_replace({"Host": "godoc.org"}).format_url()
+//
+//     will return:
+//
+//     "https://godoc.org/net/url#URL"
 //
 func HTTP(client *http.Client, limit *rate.Limiter) cel.EnvOption {
 	if client == nil {
@@ -248,6 +291,20 @@ func (httpLib) CompileOptions() []cel.EnvOption {
 					decls.NewMapType(decls.String, decls.Dyn),
 				),
 			),
+			decls.NewFunction("parse_url",
+				decls.NewInstanceOverload(
+					"string_parse_url",
+					[]*expr.Type{decls.String},
+					decls.NewMapType(decls.String, decls.Dyn),
+				),
+			),
+			decls.NewFunction("format_url",
+				decls.NewInstanceOverload(
+					"map_format_url",
+					[]*expr.Type{decls.NewMapType(decls.String, decls.Dyn)},
+					decls.String,
+				),
+			),
 		),
 	}
 }
@@ -310,6 +367,18 @@ func (l httpLib) ProgramOptions() []cel.ProgramOption {
 			&functions.Overload{
 				Operator: "map_do_request",
 				Unary:    l.doRequest,
+			},
+		),
+		cel.Functions(
+			&functions.Overload{
+				Operator: "string_parse_url",
+				Unary:    parseURL,
+			},
+		),
+		cel.Functions(
+			&functions.Overload{
+				Operator: "map_format_url",
+				Unary:    formatURL,
 			},
 		),
 	}
@@ -719,4 +788,118 @@ func makeURL(val reflect.Value) (reflect.Value, error) {
 		return reflect.Value{}, err
 	}
 	return reflect.ValueOf(u), nil
+}
+
+func parseURL(arg ref.Val) ref.Val {
+	addr, ok := arg.(types.String)
+	if !ok {
+		return types.ValOrErr(addr, "no such overload for request")
+	}
+	u, err := url.Parse(string(addr))
+	if err != nil {
+		return types.NewErr("%s", err)
+	}
+	var user interface{}
+	if u.User != nil {
+		password, passwordSet := u.User.Password()
+		user = map[string]interface{}{
+			"Username":    u.User.Username(),
+			"Password":    password,
+			"PasswordSet": passwordSet,
+		}
+	}
+	return types.NewStringInterfaceMap(types.DefaultTypeAdapter, map[string]interface{}{
+		"Scheme":      u.Scheme,
+		"Opaque":      u.Opaque,
+		"User":        user,
+		"Host":        u.Host,
+		"Path":        u.Path,
+		"RawPath":     u.RawPath,
+		"ForceQuery":  u.ForceQuery,
+		"RawQuery":    u.RawQuery,
+		"Fragment":    u.Fragment,
+		"RawFragment": u.RawFragment,
+	})
+}
+
+func formatURL(arg ref.Val) ref.Val {
+	v, err := arg.ConvertToNative(reflectMapStringAnyType)
+	if err != nil {
+		return types.NewErr("no such overload for format_url: %v", err)
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return types.NewErr("unexpected type for url map: %T", v)
+	}
+	u := url.URL{
+		Scheme:      maybeStringLookup(m, "Scheme"),
+		Opaque:      maybeStringLookup(m, "Opaque"),
+		Host:        maybeStringLookup(m, "Host"),
+		Path:        maybeStringLookup(m, "Path"),
+		RawPath:     maybeStringLookup(m, "RawPath"),
+		ForceQuery:  maybeBoolLookup(m, "ForceQuery"),
+		RawQuery:    maybeStringLookup(m, "RawQuery"),
+		Fragment:    maybeStringLookup(m, "Fragment"),
+		RawFragment: maybeStringLookup(m, "RawFragment"),
+	}
+	// TODO(kortschak): Consider improving error handling on type assertions here.
+	switch user := m["User"].(type) {
+	case nil, structpb.NullValue:
+	case map[string]interface{}:
+		if user == nil {
+			break
+		}
+		username := user["Username"].(string)
+		if user["PasswordSet"] == true {
+			password := user["Password"].(string)
+			u.User = url.UserPassword(username, password)
+		} else {
+			u.User = url.User(username)
+		}
+	case map[ref.Val]ref.Val:
+		if user == nil {
+			break
+		}
+		username := string(user[types.String("Username")].(types.String))
+		if user[types.String("PasswordSet")] == types.True {
+			password := string(user[types.String("Password")].(types.String))
+			u.User = url.UserPassword(username, password)
+		} else {
+			u.User = url.User(username)
+		}
+	case traits.Mapper:
+		if user == nil {
+			break
+		}
+		username := user.Get(types.String("Username")).Value().(string)
+		if user.Get(types.String("PasswordSet")) == types.True {
+			password := user.Get(types.String("Password")).Value().(string)
+			u.User = url.UserPassword(username, password)
+		} else {
+			u.User = url.User(username)
+		}
+	default:
+		return types.NewErr("unsupported type: %T", user)
+	}
+	return types.String(u.String())
+}
+
+// maybeStringLookup returns a string from m[key] if it is present and the
+// empty string if not. It panics is m[key] is not a string.
+func maybeStringLookup(m map[string]interface{}, key string) string {
+	v, ok := m[key]
+	if !ok {
+		return ""
+	}
+	return v.(string)
+}
+
+// maybeBoolLookup returns a bool from m[key] if it is present and false if
+// not. It panics is m[key] is not a bool.
+func maybeBoolLookup(m map[string]interface{}, key string) bool {
+	v, ok := m[key]
+	if !ok {
+		return false
+	}
+	return v.(bool)
 }

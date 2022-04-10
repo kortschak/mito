@@ -200,6 +200,40 @@ import (
 //
 //     "https://godoc.org/net/url#URL"
 //
+//
+// Parse Query
+//
+// parse_url returns a map holding the details of the parsed query corresponding
+// to the Go url.Values map:
+//
+//     <string>.parse_query() -> <map<string,<list<string>>>
+//
+// Example:
+//
+//     "page=1&line=25".parse_url()
+//
+//     will return:
+//
+//     {
+//         "line": ["25"],
+//         "page": ["1"]
+//     }
+//
+//
+// Format Query
+//
+// format_query returns string corresponding to the query map that is the receiver:
+//
+//     <map<string,<list<string>>>.format_query() -> <string>
+//
+// Example:
+//
+//     "page=1&line=25".parse_query().with_replace({"page":[string(2)]}).format_query()
+//
+//     will return:
+//
+//     line=25&page=2"
+//
 func HTTP(client *http.Client, limit *rate.Limiter) cel.EnvOption {
 	if client == nil {
 		client = http.DefaultClient
@@ -304,6 +338,20 @@ func (httpLib) CompileOptions() []cel.EnvOption {
 					decls.String,
 				),
 			),
+			decls.NewFunction("parse_query",
+				decls.NewInstanceOverload(
+					"string_parse_query",
+					[]*expr.Type{decls.String},
+					decls.NewMapType(decls.String, decls.NewListType(decls.String)),
+				),
+			),
+			decls.NewFunction("format_query",
+				decls.NewInstanceOverload(
+					"map_format_query",
+					[]*expr.Type{decls.NewMapType(decls.String, decls.NewListType(decls.String))},
+					decls.String,
+				),
+			),
 		),
 	}
 }
@@ -378,6 +426,18 @@ func (l httpLib) ProgramOptions() []cel.ProgramOption {
 			&functions.Overload{
 				Operator: "map_format_url",
 				Unary:    formatURL,
+			},
+		),
+		cel.Functions(
+			&functions.Overload{
+				Operator: "string_parse_query",
+				Unary:    parseQuery,
+			},
+		),
+		cel.Functions(
+			&functions.Overload{
+				Operator: "map_format_query",
+				Unary:    formatQuery,
 			},
 		),
 	}
@@ -899,4 +959,35 @@ func maybeBoolLookup(m map[string]interface{}, key string) bool {
 		return false
 	}
 	return v.(bool)
+}
+
+func parseQuery(arg ref.Val) ref.Val {
+	query, ok := arg.(types.String)
+	if !ok {
+		return types.ValOrErr(query, "no such overload")
+	}
+	q, err := url.ParseQuery(string(query))
+	if err != nil {
+		return types.NewErr("%s", err)
+	}
+	return types.DefaultTypeAdapter.NativeToValue(q)
+}
+
+func formatQuery(arg ref.Val) ref.Val {
+	queryMap, ok := arg.(traits.Mapper)
+	if !ok {
+		return types.ValOrErr(queryMap, "no such overload")
+	}
+	q, err := queryMap.ConvertToNative(reflectMapStringStringSliceType)
+	if err != nil {
+		return types.NewErr("no such overload for format_url: %v", err)
+	}
+	switch q := q.(type) {
+	case url.Values:
+		return types.String(url.Values(q).Encode())
+	case map[string][]string:
+		return types.String(url.Values(q).Encode())
+	default:
+		return types.NewErr("invalid type for format_url: %T", q)
+	}
 }

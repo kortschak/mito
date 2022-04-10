@@ -13,6 +13,7 @@ cmp stdout want.txt
 	"https://user:pass@unsafehost.net/".parse_url().with_replace({"User":{"Username":"otheruser","PasswordSet":true,"Password":"pwnt"}}).format_url(),
 	"https://user:pass@unsafehost.net/".parse_url().with_replace({"User":{"Username":"otheruser"}}).format_url(),
 	"https://user:pass@unsafehost.net/".parse_url().with_replace({"User":null}).format_url(),
+	"https://user:pass@unsafehost.net/".parse_url().with_replace({"User":{"Username":"otheruser","PasswordSet":true}}).format_url(),
 ]
 -- want.txt --
 [
@@ -50,5 +51,6 @@ cmp stdout want.txt
 	"https://otheruser@unsafehost.net/",
 	"https://otheruser:pwnt@unsafehost.net/",
 	"https://otheruser@unsafehost.net/",
-	"https://unsafehost.net/"
+	"https://unsafehost.net/",
+	"https://otheruser:@unsafehost.net/"
 ]

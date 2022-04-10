@@ -18,7 +18,6 @@ import (
 	"github.com/google/cel-go/interpreter/functions"
 	"golang.org/x/time/rate"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // HTTP returns a cel.EnvOption to configure extended functions for HTTP
@@ -823,12 +822,17 @@ func parseURL(arg ref.Val) ref.Val {
 }
 
 func formatURL(arg ref.Val) ref.Val {
-	v, err := arg.ConvertToNative(reflectMapStringAnyType)
+	urlMap, ok := arg.(traits.Mapper)
+	if !ok {
+		return types.ValOrErr(urlMap, "no such overload")
+	}
+	v, err := urlMap.ConvertToNative(reflectMapStringAnyType)
 	if err != nil {
 		return types.NewErr("no such overload for format_url: %v", err)
 	}
 	m, ok := v.(map[string]interface{})
 	if !ok {
+		// This should never happen.
 		return types.NewErr("unexpected type for url map: %T", v)
 	}
 	u := url.URL{
@@ -842,44 +846,37 @@ func formatURL(arg ref.Val) ref.Val {
 		Fragment:    maybeStringLookup(m, "Fragment"),
 		RawFragment: maybeStringLookup(m, "RawFragment"),
 	}
-	// TODO(kortschak): Consider improving error handling on type assertions here.
-	switch user := m["User"].(type) {
-	case nil, structpb.NullValue:
-	case map[string]interface{}:
-		if user == nil {
-			break
+	user, ok := urlMap.Find(types.String("User"))
+	if ok {
+		switch user := user.(type) {
+		case nil:
+		case traits.Mapper:
+			var username types.String
+			un, ok := user.Find(types.String("Username"))
+			if ok {
+				username, ok = un.(types.String)
+				if !ok {
+					return types.NewErr("invalid type for username: %s", un.Type())
+				}
+			}
+			if user.Get(types.String("PasswordSet")) == types.True {
+				var password types.String
+				pw, ok := user.Find(types.String("Password"))
+				if ok {
+					password, ok = pw.(types.String)
+					if !ok {
+						return types.NewErr("invalid type for password: %s", pw.Type())
+					}
+				}
+				u.User = url.UserPassword(string(username), string(password))
+			} else {
+				u.User = url.User(string(username))
+			}
+		default:
+			if user != types.NullValue {
+				return types.NewErr("unsupported type: %T", user)
+			}
 		}
-		username := user["Username"].(string)
-		if user["PasswordSet"] == true {
-			password := user["Password"].(string)
-			u.User = url.UserPassword(username, password)
-		} else {
-			u.User = url.User(username)
-		}
-	case map[ref.Val]ref.Val:
-		if user == nil {
-			break
-		}
-		username := string(user[types.String("Username")].(types.String))
-		if user[types.String("PasswordSet")] == types.True {
-			password := string(user[types.String("Password")].(types.String))
-			u.User = url.UserPassword(username, password)
-		} else {
-			u.User = url.User(username)
-		}
-	case traits.Mapper:
-		if user == nil {
-			break
-		}
-		username := user.Get(types.String("Username")).Value().(string)
-		if user.Get(types.String("PasswordSet")) == types.True {
-			password := user.Get(types.String("Password")).Value().(string)
-			u.User = url.UserPassword(username, password)
-		} else {
-			u.User = url.User(username)
-		}
-	default:
-		return types.NewErr("unsupported type: %T", user)
 	}
 	return types.String(u.String())
 }

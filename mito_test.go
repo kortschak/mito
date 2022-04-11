@@ -2,7 +2,6 @@ package mito
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -267,7 +266,6 @@ func TestRegaxp(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if got != test.want {
-				fmt.Println(got)
 				t.Errorf("unexpected result: got:- want:+\n%v", cmp.Diff(got, test.want))
 			}
 		})

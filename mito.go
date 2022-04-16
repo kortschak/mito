@@ -132,6 +132,7 @@ var (
 		"file":        lib.File(mimetypes),
 		"mime":        lib.MIME(mimetypes),
 		"http":        lib.HTTP(nil, nil),
+		"limit":       lib.Limit(limitPolicies),
 	}
 
 	mimetypes = map[string]interface{}{
@@ -140,6 +141,11 @@ var (
 		"application/gzip":     func(r io.Reader) (io.Reader, error) { return gzip.NewReader(r) },
 		"application/x-ndjson": lib.NDJSON,
 		"application/zip":      lib.Zip,
+	}
+
+	limitPolicies = map[string]lib.LimitPolicy{
+		"okta":  lib.OktaRateLimit,
+		"draft": lib.DraftRateLimit,
 	}
 )
 

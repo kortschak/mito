@@ -14,6 +14,7 @@ import (
 	"github.com/google/cel-go/interpreter/functions"
 	"github.com/google/cel-go/parser"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // Collections returns a cel.EnvOption to configure extended functions for
@@ -159,6 +160,35 @@ import (
 //
 //     [1,2,3,4,5,6,7].min()  // return 1
 //     min([1,2,3,4,5,6,7])   // return 1
+//
+//
+// Range
+//
+// Returns an iterator over the indexes of a set of equally sized lists. The
+// returned list is lazily evaluated:
+//
+//     range(<list<list<dyn>>>) -> <list<int>>
+//
+// Examples:
+//
+//     Given:
+//        {"d": {"a": [1, 2], "b": ["a", "b"], "c":["x"]}}
+//
+//     try(range([d.a, d.b]).map(i, {"a": d.a[i], "b": d.b[i]}), "error")
+//
+//     will return:
+//
+//     [
+//         {"a": 1, "b": "a"},
+//         {"a": 2, "b": "b"}
+//     ]
+//
+//     try(range([d.a, d.c]).map(i, {"a": d.a[i], "c": d.c[i]}), "error")
+//
+//     will return:
+//
+//     {"error": "mismatched length in range call: 2 != 1"}
+//
 //
 // With
 //
@@ -324,6 +354,13 @@ func (collectionsLib) CompileOptions() []cel.EnvOption {
 					[]string{"K", "V"},
 				),
 			),
+			decls.NewFunction("range",
+				decls.NewOverload(
+					"range_list_list",
+					[]*expr.Type{decls.NewListType(decls.NewListType(decls.Dyn))},
+					decls.NewListType(decls.Int),
+				),
+			),
 		),
 	}
 }
@@ -414,6 +451,12 @@ func (collectionsLib) ProgramOptions() []cel.ProgramOption {
 			&functions.Overload{
 				Operator: "map_with_replace_map",
 				Binary:   withReplace,
+			},
+		),
+		cel.Functions(
+			&functions.Overload{
+				Operator: "range_list_list",
+				Unary:    rangeIter,
 			},
 		),
 	}
@@ -871,3 +914,38 @@ func makeAs(eh parser.ExprHelper, target *expr.Expr, args []*expr.Expr) (*expr.E
 	fold := eh.Fold(label, target, parser.AccumulatorName, init, condition, step, accuExpr)
 	return eh.GlobalCall(operators.Index, fold, eh.LiteralInt(0)), nil
 }
+
+func rangeIter(vals ref.Val) ref.Val {
+	list, ok := vals.(traits.Lister)
+	if !ok {
+		return types.NoSuchOverloadErr()
+	}
+
+	num := types.IntOne
+	it := list.Iterator()
+	for i := 0; it.HasNext() == types.True; i++ {
+		l, ok := it.Next().(traits.Lister)
+		if !ok {
+			return types.NoSuchOverloadErr()
+		}
+		n := l.Size().(types.Int)
+		if i == 0 {
+			num = n
+			continue
+		}
+		if n != num {
+			return types.NewErr("mismatched length in range call: %d != %d", n, num)
+		}
+	}
+	return types.NewProtoList(types.DefaultTypeAdapter, iter{n: num})
+}
+
+type iter struct {
+	n types.Int
+
+	protoreflect.List
+}
+
+func (i iter) Len() int                   { return int(i.n) }
+func (iter) Get(i int) protoreflect.Value { return protoreflect.ValueOf(int64(i)) }
+func (iter) IsValid() bool                { return true }

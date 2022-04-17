@@ -1,0 +1,64 @@
+mito -use collections,try -data data.json src.cel
+! stderr .
+cmp stdout want.txt
+
+-- src.cel --
+data.map(e, try(range([e.a, e.b, e.c]).map(i, {
+	"a": e.a[i],
+	"b": e.b[i],
+	"c": e.c[i],
+}), "error"))
+-- data.json --
+[
+	{
+		"a": [100, 101, 102, 103, 104],
+		"b": [200, 201, 202, 203, 204],
+		"c": [300, 301, 302, 303, 304]
+	},
+	{
+		"a": [100, 101, 102, 103, 104],
+		"b": [200, 201, 202, 203],
+		"c": [300, 301, 302, 303, 304]
+	},
+	{
+		"a": "hello",
+		"b": "world",
+		"c": "!"
+	}
+]
+-- want.txt --
+[
+	[
+		{
+			"a": 100,
+			"b": 200,
+			"c": 300
+		},
+		{
+			"a": 101,
+			"b": 201,
+			"c": 301
+		},
+		{
+			"a": 102,
+			"b": 202,
+			"c": 302
+		},
+		{
+			"a": 103,
+			"b": 203,
+			"c": 303
+		},
+		{
+			"a": 104,
+			"b": 204,
+			"c": 304
+		}
+	],
+	{
+		"error": "mismatched length in range call: 4 != 5"
+	},
+	{
+		"error": "no such overload"
+	}
+]

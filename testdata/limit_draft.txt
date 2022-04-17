@@ -2,18 +2,19 @@ mito -use limit,collections,time src.cel
 ! stderr .
 cmp stdout want.txt
 
+# Replacing non-static times with a check for temporal progression.
 -- src.cel --
 [
 	{
 		"Rate-Limit-Limit": ["100"],
 		"Rate-Limit-Remaining": ["0"],
 		"Rate-Limit-Reset": ["50"]
-	}.as(h, rate_limit(h, 'draft')),
+	}.as(h, rate_limit(h, 'draft')).as(r, r.with_replace({"reset": now < r.reset})),
 	{
 		"Rate-Limit-Limit": ["5000"],
 		"Rate-Limit-Remaining": ["100"],
 		"Rate-Limit-Reset": ["36000"]
-	}.as(h, rate_limit(h, 'draft')),
+	}.as(h, rate_limit(h, 'draft')).as(r, r.with_replace({"reset": now < r.reset})),
 	{
 		"Rate-Limit-Limit": ["5000"],
 		"Rate-Limit-Remaining": ["100"],
@@ -23,38 +24,43 @@ cmp stdout want.txt
 		"Rate-Limit-Limit": ["5000, 1000;window=3600, 5000;window=86400"],
 		"Rate-Limit-Remaining": ["100"],
 		"Rate-Limit-Reset": ["36000"]
-	}.as(h, rate_limit(h, 'draft')),
+	}.as(h, rate_limit(h, 'draft')).as(r, r.with_replace({"reset": now < r.reset})),
 	{
 		"Rate-Limit-Limit": ['12, 12;window=1; burst=1000;policy="leaky bucket"'],
 		"Rate-Limit-Remaining": ["100"],
 		"Rate-Limit-Reset": ["36000"]
-	}.as(h, rate_limit(h, 'draft')),
+	}.as(h, rate_limit(h, 'draft')).as(r, r.with_replace({"reset": now < r.reset})),
 ]
 -- want.txt --
 [
 	{
 		"burst": 1,
 		"headers": "Rate-Limit-Limit=\"100\" Rate-Limit-Remaining=\"0\" Rate-Limit-Reset=\"50\"",
-		"rate": 0
+		"rate": 0,
+		"reset": true
 	},
 	{
 		"burst": 1,
 		"headers": "Rate-Limit-Limit=\"5000\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"36000\"",
-		"rate": 0.002777777777777778
+		"rate": 0.002777777777777778,
+		"reset": true
 	},
 	{
 		"burst": 1,
 		"headers": "Rate-Limit-Limit=\"5000\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"Fri, 31 Dec 9999 23:59:59 GMT\"",
-		"rate": 1.0842021724855044e-8
+		"rate": 1.0842021724855044e-8,
+		"reset": "9999-12-31T23:59:59Z"
 	},
 	{
 		"burst": 1,
 		"headers": "Rate-Limit-Limit=\"5000, 1000;window=3600, 5000;window=86400\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"36000\"",
-		"rate": 0.0011574074074074073
+		"rate": 0.0011574074074074073,
+		"reset": true
 	},
 	{
 		"burst": 1000,
 		"headers": "Rate-Limit-Limit=\"12, 12;window=1; burst=1000;policy=\\\"leaky bucket\\\"\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"36000\"",
-		"rate": 100
+		"rate": 100,
+		"reset": true
 	}
 ]

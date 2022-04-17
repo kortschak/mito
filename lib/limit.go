@@ -54,7 +54,7 @@ import (
 //     rate_limit(h, 'okta')
 //     rate_limit(h, 'draft')
 //
-//     // Similar semantics to the octa policy.
+//     // Similar semantics to the okta policy.
 //     rate_limit(h, 'X-Rate-Limit', true, false, duration('1s'), 1)
 //
 //     // Similar semantics to the draft policy in the simplest case.
@@ -163,21 +163,22 @@ func mapStrings(val ref.Val) (map[string][]string, error) {
 // It should be handed to the Limit lib with
 //
 //  Limit(map[string]lib.LimitPolicy{
-//  	"octa": lib.OktaRateLimit,
+//  	"okta": lib.OktaRateLimit,
 //  })
 //
 // It will then be able to be used in a limit call.
 //
 // Example:
 //
-//     rate_limit(h, 'octa')
+//     rate_limit(h, 'okta')
 //
 //     might return:
 //
 //     {
 //         "burst": 1,
 //         "headers": "X-Rate-Limit-Limit=\"600\" X-Rate-Limit-Remaining=\"598\" X-Rate-Limit-Reset=\"1650094960\"",
-//         "rate": 0.9975873271836141
+//         "rate": 0.9975873271836141,
+//         "reset": "2022-04-16T07:48:40Z"
 //     },
 //
 // See https://developer.okta.com/docs/reference/rl-best-practices/
@@ -207,12 +208,14 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 			"error": err.Error(),
 		}
 	}
-	per := time.Until(time.Unix(rst, 0)).Seconds()
+	resetTime := time.Unix(rst, 0)
+	per := time.Until(resetTime).Seconds()
 	return map[string]interface{}{
 		"headers": fmt.Sprintf("X-Rate-Limit-Limit=%q X-Rate-Limit-Remaining=%q X-Rate-Limit-Reset=%q",
 			limit, remaining, reset),
 		"rate":  rate.Limit(rem / per),
 		"burst": 1, // Be conservative here; the docs don't describe burst rates.
+		"reset": resetTime.UTC(),
 	}
 }
 
@@ -234,7 +237,8 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 //     {
 //         "burst": 1,
 //         "headers": "Rate-Limit-Limit=\"5000\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"Sat, 16 Apr 2022 07:48:40 GMT\"",
-//         "rate": 0.16689431007474315
+//         "rate": 0.16689431007474315,,
+//         "reset": "2022-04-16T07:48:40Z"
 //     }
 //
 //     or
@@ -242,7 +246,8 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 //     {
 //         "burst": 1000,
 //         "headers": "Rate-Limit-Limit=\"12, 12;window=1; burst=1000;policy=\\\"leaky bucket\\\"\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"Sat, 16 Apr 2022 07:48:40 GMT\"",
-//         "rate": 100
+//         "rate": 100,,
+//         "reset": "2022-04-16T07:48:40Z"
 //     }
 //
 // See https://tools.ietf.org/id/draft-polli-ratelimit-headers-00.html
@@ -264,13 +269,19 @@ func DraftRateLimit(h http.Header) map[string]interface{} {
 			"error": err.Error(),
 		}
 	}
-	var per float64
+	var (
+		per       float64
+		resetTime time.Time
+	)
 	if d, err := strconv.ParseFloat(reset, 64); err == nil {
 		per = d
+		resetTime = time.Now().Add(time.Duration(d) * time.Second)
 	} else if t, err := time.Parse(http.TimeFormat, reset); err == nil {
 		per = time.Until(t).Seconds()
+		resetTime = t
 	} else if t, err := time.Parse(time.RFC1123, reset); err == nil {
 		per = time.Until(t).Seconds()
+		resetTime = t
 	} else {
 		return map[string]interface{}{
 			"headers": fmt.Sprintf("Rate-Limit-Limit=%q Rate-Limit-Remaining=%q Rate-Limit-Reset=%q",
@@ -323,6 +334,7 @@ func DraftRateLimit(h http.Header) map[string]interface{} {
 			limit, remaining, reset),
 		"rate":  rate.Limit(rem / per),
 		"burst": burst,
+		"reset": resetTime.UTC(),
 	}
 }
 
@@ -417,17 +429,24 @@ func limitPolicy(h http.Header, prefix string, canonical, delta bool, window tim
 		return m
 	}
 
-	var per float64
+	var (
+		per       float64
+		resetTime time.Time
+	)
 	if d, err := strconv.ParseInt(reset, 10, 64); err == nil {
 		if delta {
 			per = float64(d)
+			resetTime = time.Now().Add(time.Duration(d) * time.Second)
 		} else {
-			per = time.Until(time.Unix(d, 0)).Seconds()
+			resetTime = time.Unix(d, 0)
+			per = time.Until(resetTime).Seconds()
 		}
 	} else if t, err := time.Parse(http.TimeFormat, reset); err == nil {
 		per = time.Until(t).Seconds()
+		resetTime = t
 	} else if t, err := time.Parse(time.RFC1123, reset); err == nil {
 		per = time.Until(t).Seconds()
+		resetTime = t
 	} else {
 		m["error"] = fmt.Sprintf("could not parse %q as number or timestamp", reset)
 		return m
@@ -439,6 +458,7 @@ func limitPolicy(h http.Header, prefix string, canonical, delta bool, window tim
 		burst = 1
 	}
 	m["burst"] = burst
+	m["reset"] = resetTime.UTC()
 	return m
 }
 

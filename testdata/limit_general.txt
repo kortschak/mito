@@ -11,6 +11,11 @@ cmp stdout want.txt
 		"Rate-Limit-Reset": ["50"]
 	}.as(h, rate_limit(h, 'Rate-Limit', true, true, duration('1s'), 100)).as(r, r.with_replace({"reset": now < r.reset})),
 	{
+		"Rate-Limit-Limit": ["100"],
+		"Rate-Limit-Remaining": ["0"],
+		"Rate-Limit-Reset": ["50"]
+	}.as(h, rate_limit(h, 'Rate-Limit', true, true, duration('1m'), 100)).as(r, r.with_replace({"reset": now < r.reset})),
+	{
 		"Rate-Limit-Limit": ["5000"],
 		"Rate-Limit-Remaining": ["100"],
 		"Rate-Limit-Reset": ["36000"]
@@ -46,42 +51,56 @@ cmp stdout want.txt
 	{
 		"burst": 100,
 		"headers": "Rate-Limit-Limit=\"100\" Rate-Limit-Remaining=\"0\" Rate-Limit-Reset=\"50\"",
+		"next": 100,
+		"rate": 0,
+		"reset": true
+	},
+	{
+		"burst": 100,
+		"headers": "Rate-Limit-Limit=\"100\" Rate-Limit-Remaining=\"0\" Rate-Limit-Reset=\"50\"",
+		"next": 1.6666666666666667,
 		"rate": 0,
 		"reset": true
 	},
 	{
 		"burst": 100,
 		"headers": "Rate-Limit-Limit=\"5000\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"36000\"",
+		"next": 5000,
 		"rate": 0.002777777777777778,
 		"reset": true
 	},
 	{
 		"burst": 100,
 		"headers": "Rate-Limit-Limit=\"5000\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"Fri, 31 Dec 9999 23:59:59 GMT\"",
+		"next": 5000,
 		"rate": 1.0842021724855044e-8,
 		"reset": "9999-12-31T23:59:59Z"
 	},
 	{
 		"burst": 100,
 		"headers": "X-RateLimit-Limit=\"100\" X-RateLimit-Remaining=\"0\" X-RateLimit-Reset=\"50\"",
+		"next": 100,
 		"rate": 0,
 		"reset": true
 	},
 	{
 		"burst": 100,
 		"headers": "X-RateLimit-Limit=\"5000\" X-RateLimit-Remaining=\"100\" X-RateLimit-Reset=\"36000\"",
+		"next": 5000,
 		"rate": 0.002777777777777778,
 		"reset": true
 	},
 	{
 		"burst": 100,
 		"headers": "X-RateLimit-Limit=\"5000\" X-RateLimit-Remaining=\"100\" X-RateLimit-Reset=\"Fri, 31 Dec 9999 23:59:59 GMT\"",
+		"next": 5000,
 		"rate": 1.0842021724855044e-8,
 		"reset": "9999-12-31T23:59:59Z"
 	},
 	{
 		"burst": 100,
 		"headers": "X-RateLimit-Limit=\"5000\" X-RateLimit-Remaining=\"100\" X-RateLimit-Reset=\"253402300799\"",
+		"next": 5000,
 		"rate": 1.0842021724855044e-8,
 		"reset": "9999-12-31T23:59:59Z"
 	}

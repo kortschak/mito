@@ -23,9 +23,10 @@ import (
 //
 // It takes a mapping of policy names to policy interpreters to allow implementing
 // specific rate limit policies. The map returned by the policy functions should
-// have a "rate" field with type rate.Limit or string with the value "inf", and a
-// "burst" field with type int. The semantics of "rate" and "burst" are described
-// in the documentation for the golang.org/x/time/rate package.
+// have "rate" and "next" fields with type rate.Limit or string with the value "inf",
+// a "burst" field with type int and a "reset" field with type time.Time in the UTC
+// location. The semantics of "rate" and "burst" are described in the documentation
+// for the golang.org/x/time/rate package.
 //
 // The map may have other fields that can be logged. If a field named "error"
 // exists it should be a string with an error message indicating the result can
@@ -36,8 +37,11 @@ import (
 // rate_limit returns <map<string,dyn>> interpreted through the registered rate
 // limit policy or with a generalised policy constructor:
 //
-//     rate_limit(<map<string,dyn>>, <string>) -> <map<string,dyn>>
+//     rate_limit(<map<string,dyn>>, <string>, <duration>) -> <map<string,dyn>>
 //     rate_limit(<map<string,dyn>>, <string>, <bool>, <bool>, <duration>, <int>) -> <map<string,dyn>>
+//
+// In the first form the string is the policy name and the duration is the default
+// quota window to use in the absence of window information from headers.
 //
 // In the second form the parameters are the header, the prefix for the rate limit
 // header keys, whether the keys are canonically formatted MIME header keys,
@@ -51,8 +55,8 @@ import (
 //
 // Examples:
 //
-//     rate_limit(h, 'okta')
-//     rate_limit(h, 'draft')
+//     rate_limit(h, 'okta', duration('1m'))
+//     rate_limit(h, 'draft', duration('1m'))
 //
 //     // Similar semantics to the okta policy.
 //     rate_limit(h, 'X-Rate-Limit', true, false, duration('1s'), 1)
@@ -67,7 +71,7 @@ func Limit(policy map[string]LimitPolicy) cel.EnvOption {
 	return cel.Lib(limitLib{policies: policy})
 }
 
-type LimitPolicy func(header http.Header) map[string]interface{}
+type LimitPolicy func(header http.Header, window time.Duration) map[string]interface{}
 
 type limitLib struct {
 	policies map[string]LimitPolicy
@@ -78,8 +82,8 @@ func (limitLib) CompileOptions() []cel.EnvOption {
 		cel.Declarations(
 			decls.NewFunction("rate_limit",
 				decls.NewOverload(
-					"map_dyn_rate_limit_string",
-					[]*expr.Type{decls.NewMapType(decls.String, decls.Dyn), decls.String},
+					"map_dyn_rate_limit_string_duration",
+					[]*expr.Type{decls.NewMapType(decls.String, decls.Dyn), decls.String, decls.Duration},
 					decls.NewMapType(decls.String, decls.Dyn),
 				),
 			),
@@ -98,8 +102,8 @@ func (l limitLib) ProgramOptions() []cel.ProgramOption {
 	return []cel.ProgramOption{
 		cel.Functions(
 			&functions.Overload{
-				Operator: "map_dyn_rate_limit_string",
-				Binary:   l.translatePolicy,
+				Operator: "map_dyn_rate_limit_string_duration",
+				Function: l.translatePolicy,
 			},
 			&functions.Overload{
 				Operator: "map_dyn_rate_limit_string_bool_bool_duration_int",
@@ -109,14 +113,21 @@ func (l limitLib) ProgramOptions() []cel.ProgramOption {
 	}
 }
 
-func (l limitLib) translatePolicy(arg0, arg1 ref.Val) ref.Val {
-	headers, ok := arg0.(traits.Mapper)
-	if !ok {
-		return types.ValOrErr(headers, "no such overload for headers: %s", arg0.Type())
+func (l limitLib) translatePolicy(args ...ref.Val) ref.Val {
+	if len(args) != 3 {
+		return types.NewErr("no such overload")
 	}
-	policy, ok := arg1.(types.String)
+	headers, ok := args[0].(traits.Mapper)
 	if !ok {
-		return types.ValOrErr(policy, "no such overload for policy: %s", arg1.Type())
+		return types.ValOrErr(headers, "no such overload for headers: %s", args[0].Type())
+	}
+	policy, ok := args[1].(types.String)
+	if !ok {
+		return types.ValOrErr(policy, "no such overload for policy: %s", args[1].Type())
+	}
+	window, ok := args[2].(types.Duration)
+	if !ok {
+		return types.ValOrErr(window, "no such overload for window: %s", args[2].Type())
 	}
 	translate, ok := l.policies[string(policy)]
 	if !ok {
@@ -129,7 +140,7 @@ func (l limitLib) translatePolicy(arg0, arg1 ref.Val) ref.Val {
 	if err != nil {
 		return types.NewErr("%s", err)
 	}
-	return types.DefaultTypeAdapter.NativeToValue(translate(h))
+	return types.DefaultTypeAdapter.NativeToValue(translate(h, window.Duration))
 }
 
 func mapStrings(val ref.Val) (map[string][]string, error) {
@@ -166,23 +177,25 @@ func mapStrings(val ref.Val) (map[string][]string, error) {
 //  	"okta": lib.OktaRateLimit,
 //  })
 //
-// It will then be able to be used in a limit call.
+// It will then be able to be used in a limit call with the window duration
+// given by the Okta documentation.
 //
 // Example:
 //
-//     rate_limit(h, 'okta')
+//     rate_limit(h, 'okta', duration('1m'))
 //
 //     might return:
 //
 //     {
 //         "burst": 1,
 //         "headers": "X-Rate-Limit-Limit=\"600\" X-Rate-Limit-Remaining=\"598\" X-Rate-Limit-Reset=\"1650094960\"",
+//         "next": 10,
 //         "rate": 0.9975873271836141,
 //         "reset": "2022-04-16T07:48:40Z"
 //     },
 //
 // See https://developer.okta.com/docs/reference/rl-best-practices/
-func OktaRateLimit(h http.Header) map[string]interface{} {
+func OktaRateLimit(h http.Header, window time.Duration) map[string]interface{} {
 	limit := h.Get("X-Rate-Limit-Limit")
 	remaining := h.Get("X-Rate-Limit-Remaining")
 	reset := h.Get("X-Rate-Limit-Reset")
@@ -190,6 +203,14 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 		return map[string]interface{}{
 			"headers": fmt.Sprintf("X-Rate-Limit-Limit=%q X-Rate-Limit-Remaining=%q X-Rate-Limit-Reset=%q",
 				limit, remaining, reset),
+		}
+	}
+	lim, err := strconv.ParseFloat(limit, 64)
+	if err != nil {
+		return map[string]interface{}{
+			"headers": fmt.Sprintf("X-Rate-Limit-Limit=%q X-Rate-Limit-Remaining=%q X-Rate-Limit-Reset=%q",
+				limit, remaining, reset),
+			"error": err.Error(),
 		}
 	}
 	rem, err := strconv.ParseFloat(remaining, 64)
@@ -214,7 +235,8 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 		"headers": fmt.Sprintf("X-Rate-Limit-Limit=%q X-Rate-Limit-Remaining=%q X-Rate-Limit-Reset=%q",
 			limit, remaining, reset),
 		"rate":  rate.Limit(rem / per),
-		"burst": 1, // Be conservative here; the docs don't describe burst rates.
+		"next":  rate.Limit(lim / window.Seconds()),
+		"burst": 1, // Be conservative here; the docs don't exactly specify burst rates.
 		"reset": resetTime.UTC(),
 	}
 }
@@ -226,18 +248,20 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 //  	"draft": lib.DraftRateLimit,
 //  })
 //
-// It will then be able to be used in a limit call.
+// It will then be able to be used in a limit call where the duration is
+// the default quota window.
 //
 // Example:
 //
-//     rate_limit(h, 'draft')
+//     rate_limit(h, 'draft', duration('60s'))
 //
 //     might return something like:
 //
 //     {
 //         "burst": 1,
 //         "headers": "Rate-Limit-Limit=\"5000\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"Sat, 16 Apr 2022 07:48:40 GMT\"",
-//         "rate": 0.16689431007474315,,
+//         "next": 83.33333333333333,
+//         "rate": 0.16689431007474315,
 //         "reset": "2022-04-16T07:48:40Z"
 //     }
 //
@@ -246,12 +270,13 @@ func OktaRateLimit(h http.Header) map[string]interface{} {
 //     {
 //         "burst": 1000,
 //         "headers": "Rate-Limit-Limit=\"12, 12;window=1; burst=1000;policy=\\\"leaky bucket\\\"\" Rate-Limit-Remaining=\"100\" Rate-Limit-Reset=\"Sat, 16 Apr 2022 07:48:40 GMT\"",
-//         "rate": 100,,
+//         "next": 12,
+//         "rate": 100,
 //         "reset": "2022-04-16T07:48:40Z"
 //     }
 //
 // See https://tools.ietf.org/id/draft-polli-ratelimit-headers-00.html
-func DraftRateLimit(h http.Header) map[string]interface{} {
+func DraftRateLimit(h http.Header, window time.Duration) map[string]interface{} {
 	limit := h.Get("Rate-Limit-Limit")
 	remaining := h.Get("Rate-Limit-Remaining")
 	reset := h.Get("Rate-Limit-Reset")
@@ -301,6 +326,7 @@ func DraftRateLimit(h http.Header) map[string]interface{} {
 			"error": err.Error(),
 		}
 	}
+	win := window.Seconds()
 	for _, f := range limFields[1:] {
 		p := policy(strings.TrimSpace(f))
 		q, err := p.quota()
@@ -323,9 +349,9 @@ func DraftRateLimit(h http.Header) map[string]interface{} {
 			}
 		}
 		if w >= 0 {
-			per = float64(w)
+			win = float64(w)
 		}
-		if b >= 0 {
+		if b > 0 {
 			burst = b
 		}
 	}
@@ -333,6 +359,7 @@ func DraftRateLimit(h http.Header) map[string]interface{} {
 		"headers": fmt.Sprintf("Rate-Limit-Limit=%q Rate-Limit-Remaining=%q Rate-Limit-Reset=%q",
 			limit, remaining, reset),
 		"rate":  rate.Limit(rem / per),
+		"next":  rate.Limit(float64(quota) / win),
 		"burst": burst,
 		"reset": resetTime.UTC(),
 	}
@@ -423,6 +450,11 @@ func limitPolicy(h http.Header, prefix string, canonical, delta bool, window tim
 	if limit == "" || remaining == "" || reset == "" {
 		return m
 	}
+	lim, err := strconv.ParseFloat(limit, 64)
+	if err != nil {
+		m["error"] = err.Error()
+		return m
+	}
 	rem, err := strconv.ParseFloat(remaining, 64)
 	if err != nil {
 		m["error"] = err.Error()
@@ -453,6 +485,7 @@ func limitPolicy(h http.Header, prefix string, canonical, delta bool, window tim
 	}
 	per *= window.Seconds()
 
+	m["next"] = rate.Limit(lim / window.Seconds())
 	m["rate"] = rate.Limit(rem / per)
 	if burst < 1 {
 		burst = 1
